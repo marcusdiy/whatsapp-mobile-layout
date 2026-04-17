@@ -53,10 +53,98 @@
   UTILS.addStyle(`
       @media (max-width: 900px) {
         :root {
-          --wam-rail-width: 64px;
-          --wam-drawer-width: min(calc(100vw - var(--wam-rail-width)), 400px);
+          --wam-rail-width: 56px;
+          --wam-drawer-width: min(calc(100vw - var(--wam-rail-width) - 32px), 320px);
           --wam-section-list-height: clamp(260px, 42vh, 380px);
-          --wam-drawer-handle-width: 42px;
+          --wam-drawer-handle-width: 36px;
+        }
+
+        /* Popups, tooltips, dialogs and media composer overlays must float
+           above the drawer (z-index 1100) and rail (1201). We tag both
+           the popup itself AND the WhatsApp absolute-positioned popup
+           HOST container that wraps it (otherwise z-index on the inner
+           tooltip is meaningless inside its low-z stacking context). */
+        [role="tooltip"],
+        [role="menu"],
+        [role="listbox"] {
+          z-index: 2147483646 !important;
+        }
+        .wam-popup-host {
+          z-index: 2147483645 !important;
+          overflow: visible !important;
+          isolation: isolate !important;
+        }
+        [role="dialog"],
+        [aria-modal="true"],
+        [data-animate-modal-popup],
+        [data-animate-modal-body],
+        .wam-popup-sibling {
+          z-index: 2147483640 !important;
+        }
+        /* Confirmation / option dialogs must fit in the narrow viewport.
+           WhatsApp uses min-width values that overflow on mobile widths,
+           pushing Cancel/OK buttons offscreen. */
+        @media (max-width: 900px) {
+          [role="dialog"],
+          [aria-modal="true"],
+          [data-animate-modal-body] > div,
+          [data-animate-modal-popup] > div {
+            max-width: calc(100vw - 24px) !important;
+            min-width: 0 !important;
+            width: auto !important;
+            box-sizing: border-box !important;
+          }
+          [role="dialog"] *,
+          [aria-modal="true"] * {
+            max-width: 100% !important;
+            min-width: 0 !important;
+          }
+        }
+        /* When an empty overlay sibling gets populated by WhatsApp (media
+           composer, drag-drop overlay etc.), we strip wam-overlay-neutral
+           and add wam-popup-sibling. Restore normal rendering so its
+           contents are actually visible. */
+        .wam-popup-sibling {
+          width: auto !important;
+          height: auto !important;
+          opacity: 1 !important;
+          pointer-events: auto !important;
+          overflow: visible !important;
+        }
+        /* If the populated overlay needs to fill the conversation area
+           (drag overlay, media composer), it usually has explicit inset
+           values. Provide a sensible fallback for those that don't. */
+        .wam-popup-sibling.wam-popup-fill {
+          position: fixed !important;
+          top: 0 !important;
+          left: var(--wam-rail-width) !important;
+          right: 0 !important;
+          bottom: 0 !important;
+          width: calc(100vw - var(--wam-rail-width)) !important;
+          height: 100vh !important;
+        }
+        /* Inner WA layouts (media composer split-pane, drag overlay) can
+           leave the popup-sibling visually small. Force its children to
+           fill the available space so the composer is usable on mobile. */
+        .wam-popup-sibling.wam-popup-fill > * {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-width: 0 !important;
+          height: 100% !important;
+          left: 0 !important;
+          right: 0 !important;
+          flex: 1 1 auto !important;
+        }
+        /* WhatsApp's media composer renders as a 2-column flex container:
+           a duplicated chat-list/conversation pane on the left and the
+           actual file-preview composer on the right. On narrow widths we
+           hide the duplicate so the composer takes full width. */
+        .wam-popup-sibling.wam-popup-fill > *:first-child:not(:only-child) {
+          display: none !important;
+        }
+        .wam-popup-sibling.wam-popup-fill > *:last-child {
+          flex: 1 1 100% !important;
+          width: 100% !important;
         }
 
         /* App root: collapse to viewport width, keep flex layout */
@@ -90,6 +178,7 @@
           flex: 0 0 var(--wam-rail-width) !important;
           position: relative !important;
           z-index: 1201 !important;
+          overflow: visible !important;
         }
         .wam-app-root.wam-mode-section > .wam-sidebar {
           grid-column: 1 !important;
@@ -98,10 +187,19 @@
         }
 
         /* Neutralise empty overlay siblings that block clicks and show as
-           an invisible vertical line (pane resize wrappers). */
+           an invisible vertical line (pane resize wrappers). Do NOT use
+           display:none — WhatsApp uses these as drag/drop and tooltip
+           hosts; removing them breaks drag-to-upload and other features.
+           We collapse them to zero size + transparent + click-through. */
         .wam-overlay-neutral {
+          position: absolute !important;
+          width: 0 !important;
+          height: 0 !important;
+          min-width: 0 !important;
+          min-height: 0 !important;
+          opacity: 0 !important;
           pointer-events: none !important;
-          display: none !important;
+          overflow: visible !important;
         }
         .wam-hidden-pane {
           pointer-events: none !important;
@@ -183,39 +281,42 @@
           min-height: 0 !important;
         }
 
-        /* Drawer handle (appended to <body>, animates with drawer state) */
-        .wam-drawer-handle {
+        /* Hover hot zone: a thin invisible strip along the left edge of
+           the main pane. Hovering it slides the drawer in (replaces the
+           old menu button). Stays out of the way otherwise. */
+        .wam-edge-hotzone {
           position: fixed;
-          top: 80px;
           left: var(--wam-rail-width);
-          width: var(--wam-drawer-handle-width);
-          height: 112px;
-          border: 0;
-          border-radius: 0 18px 18px 0;
-          background: #21c063;
-          color: #fff;
+          top: 0;
+          bottom: 0;
+          width: 18px;
+          /* Must sit above wam-popup-host (2147483645) so the zone is
+             never visually buried under WhatsApp's popup-root containers
+             that we lift for tooltip rendering. */
+          z-index: 2147483647;
+          background: transparent;
           cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 8px 18px #00000033;
-          z-index: 1200;
-          transition: left 0.2s ease;
         }
-        body.wam-drawer-open .wam-drawer-handle {
-          left: calc(var(--wam-rail-width) + var(--wam-drawer-width)) !important;
+        body.wam-drawer-open .wam-edge-hotzone {
+          left: calc(var(--wam-rail-width) + var(--wam-drawer-width));
+          width: 24px;
         }
-        body.wam-section-stack-mode .wam-drawer-handle {
-          opacity: 0 !important;
-          pointer-events: none !important;
+        /* Subtle visual hint on the edge (a thin colored stripe). */
+        .wam-edge-hotzone::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 4px;
+          height: 56px;
+          border-radius: 0 4px 4px 0;
+          background: #21c06366;
+          transition: background 0.15s ease, width 0.15s ease;
         }
-        .wam-drawer-handle::before {
-          content: 'Menu';
-          writing-mode: vertical-rl;
-          transform: rotate(180deg);
-          letter-spacing: 0.08em;
-          font-size: 12px;
-          font-weight: 600;
+        .wam-edge-hotzone:hover::before {
+          background: #21c063;
+          width: 6px;
         }
 
         .wam-section-root {
@@ -356,6 +457,90 @@
     return /^chat/i.test(icon) || /^chats/i.test(icon);
   }
 
+  // A "popup-like" sibling is anything WhatsApp adds at the app-root level
+  // that's actually a tooltip / menu / dialog / media composer etc. — not
+  // a structural pane. We must NEVER hide or neutralise these, otherwise
+  // file uploads, attach menus, emoji pickers and tooltips break.
+  const overlayWatchers = new WeakMap();
+
+  function hasRichOverlayContent(el) {
+    if (!el) return false;
+    return !!el.querySelector(
+      [
+        '[role="dialog"]',
+        '[role="menu"]',
+        '[role="tooltip"]',
+        '[role="listbox"]',
+        '[aria-modal="true"]',
+        '[data-animate-modal-popup]',
+        '[data-animate-modal-body]',
+        '[contenteditable="true"]',
+        'input[type="file"]',
+        'textarea',
+        '[data-icon="send"]',
+        '[data-icon="document-refreshed"]',
+        '[data-icon="media-multiple"]',
+        '[data-icon="image"]',
+        '[data-icon="document"]',
+      ].join(", "),
+    );
+  }
+
+  function promoteOverlayIfPopulated(child) {
+    if (!child.classList.contains("wam-overlay-neutral")) return;
+    if (!hasRichOverlayContent(child)) return;
+
+    child.classList.remove("wam-overlay-neutral");
+    child.classList.add("wam-popup-sibling");
+
+    // If the populated overlay has no positioning that gives it visible
+    // size, make it fill the conversation area (drag overlay fallback).
+    const r = child.getBoundingClientRect();
+    if (r.width < 100 || r.height < 100) {
+      child.classList.add("wam-popup-fill");
+    }
+  }
+
+  function watchOverlayNeutral(child) {
+    if (overlayWatchers.has(child)) return;
+    const obs = new MutationObserver(() => {
+      promoteOverlayIfPopulated(child);
+      // If WA later empties it again, demote back so it doesn't block.
+      if (
+        child.classList.contains("wam-popup-sibling") &&
+        !hasRichOverlayContent(child)
+      ) {
+        child.classList.remove("wam-popup-sibling", "wam-popup-fill");
+        child.classList.add("wam-overlay-neutral");
+      }
+    });
+    obs.observe(child, { childList: true, subtree: true, attributes: false });
+    overlayWatchers.set(child, obs);
+  }
+
+  function isPopupLike(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.matches('[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]')) {
+      return true;
+    }
+    if (el.querySelector('[role="dialog"], [role="menu"], [role="tooltip"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]')) {
+      return true;
+    }
+    // Media/file composer: WhatsApp inserts a fullscreen overlay with a
+    // close button + a row of file inputs. Detect via the close icon plus
+    // the absence of #pane-side / rail content.
+    if (el.querySelector('[data-icon="x"], [data-icon="x-alt"], [data-icon="close"]') &&
+        !el.querySelector('#pane-side, header')) {
+      return true;
+    }
+    // Drag-drop overlay shown when dragging a file over the window.
+    if (el.querySelector('[data-icon="media-multiple"], [data-icon="paperclip"], [data-icon="document-refreshed"]') &&
+        !el.querySelector('#pane-side, header')) {
+      return true;
+    }
+    return false;
+  }
+
   function tagDrawerPane(drawer) {
     const side = drawer?.querySelector("#side");
     const paneSide = drawer?.querySelector("#pane-side");
@@ -427,6 +612,7 @@
       child.classList.remove("wam-open");
       child.classList.remove("wam-hidden-pane");
       child.classList.remove("wam-overlay-neutral");
+      child.classList.remove("wam-popup-sibling");
     }
     // Force layout so positions/sizes reflect the reset.
     void nav.offsetHeight;
@@ -447,6 +633,17 @@
     const visibleContentChildren = [];
     for (const child of nav.children) {
       if (child === rail) continue;
+
+      // Popups, tooltips, menus and the media-composer overlay must be
+      // left alone. Tag them so CSS can lift their z-index and position
+      // them over the main pane, but DO NOT include them in pane
+      // classification (otherwise they'd be hidden or stretched as
+      // structural panes).
+      if (isPopupLike(child)) {
+        child.classList.add("wam-popup-sibling");
+        continue;
+      }
+
       const r = child.getBoundingClientRect();
       const cs = getComputedStyle(child);
       const hasRichContent = !!child.querySelector('#pane-side, [data-icon], [role="tablist"], input, textarea');
@@ -454,6 +651,7 @@
 
       if (isAbsolute && !hasRichContent) {
         child.classList.add("wam-overlay-neutral");
+        watchOverlayNeutral(child);
         continue;
       }
       if (r.width > 100 && r.height > 100) {
@@ -520,7 +718,30 @@
     if (observedNav === nav && navObserver) return;
     if (navObserver) navObserver.disconnect();
 
-    navObserver = new MutationObserver(() => {
+    navObserver = new MutationObserver((mutations) => {
+      // Filter out mutations that only add/remove popup-like nodes.
+      // Re-running the classifier on every tooltip mount caused tooltips
+      // to flicker (appear, get re-tagged, lose hover, vanish).
+      const structural = mutations.some((m) => {
+        const nodes = [...m.addedNodes, ...m.removedNodes];
+        return nodes.some((n) => {
+          if (n.nodeType !== 1) return false;
+          if (isPopupLike(n)) return false;
+          if (n.classList?.contains("wam-popup-sibling")) return false;
+          return true;
+        });
+      });
+      if (!structural) {
+        // Still tag any newly added popups so they get correct z-index.
+        for (const m of mutations) {
+          for (const n of m.addedNodes) {
+            if (n.nodeType === 1 && isPopupLike(n)) {
+              n.classList.add("wam-popup-sibling");
+            }
+          }
+        }
+        return;
+      }
       debouncedApply();
     });
     navObserver.observe(nav, { childList: true, subtree: false });
@@ -540,9 +761,15 @@
   }
 
   function setRailWidth(rail) {
-    const width = Math.round(rail.getBoundingClientRect().width) || 64;
+    const measured = Math.round(rail.getBoundingClientRect().width) || 56;
+    // Clamp to a safe range so a misclassified header can't blow up the
+    // layout to e.g. 200px wide.
+    const width = Math.max(48, Math.min(measured, 64));
     document.documentElement.style.setProperty("--wam-rail-width", `${width}px`);
-    document.documentElement.style.setProperty("--wam-drawer-width", `min(calc(100vw - ${width}px), 400px)`);
+    document.documentElement.style.setProperty(
+      "--wam-drawer-width",
+      `min(calc(100vw - ${width}px - 32px), 320px)`,
+    );
   }
 
   function setDrawerOpen(isOpen) {
@@ -556,28 +783,71 @@
     document.body.classList.toggle("wam-section-stack-mode", isSectionMode);
   }
 
+  let hoverCloseTimer = null;
+
   function ensureHandle(drawer) {
-    // Handle lives on <body> (not inside drawer) because the drawer uses
+    // Hot zone lives on <body> (not inside drawer) because the drawer uses
     // transform: translateX which would create a containing block for
-    // position:fixed descendants, trapping the handle off-screen.
-    let handle = document.body.querySelector(":scope > .wam-drawer-handle");
-    if (!handle) {
-      handle = document.createElement("button");
-      handle.type = "button";
-      handle.className = "wam-drawer-handle";
-      handle.setAttribute("aria-label", "Toggle section drawer");
-      document.body.appendChild(handle);
-      handle.addEventListener("click", (e) => {
+    // position:fixed descendants, trapping the zone off-screen.
+    let zone = document.body.querySelector(":scope > .wam-edge-hotzone");
+    if (!zone) {
+      zone = document.createElement("div");
+      zone.className = "wam-edge-hotzone";
+      zone.setAttribute("aria-label", "Reveal chat list");
+      document.body.appendChild(zone);
+
+      const cancelClose = () => {
+        if (hoverCloseTimer) {
+          clearTimeout(hoverCloseTimer);
+          hoverCloseTimer = null;
+        }
+      };
+      const scheduleClose = () => {
+        cancelClose();
+        hoverCloseTimer = setTimeout(() => {
+          if (!drawerEl) return;
+          // Don't close if cursor came back over drawer or zone.
+          const hovered = drawerEl.matches(":hover") || zone.matches(":hover");
+          if (!hovered) setDrawerOpen(false);
+          hoverCloseTimer = null;
+        }, 350);
+      };
+
+      zone.addEventListener("mouseenter", () => {
+        cancelClose();
+        if (drawerEl) setDrawerOpen(true);
+      });
+      zone.addEventListener("mouseleave", scheduleClose);
+      // Tap to toggle on touch devices.
+      zone.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const activeDrawer = drawerEl || drawer;
-        if (!activeDrawer) return;
-        setDrawerOpen(!drawerOpen);
+        if (drawerEl) setDrawerOpen(!drawerOpen);
       });
-    } else if (handle.parentElement !== document.body) {
-      document.body.appendChild(handle);
+
+      // When the cursor leaves the drawer, close after a short delay
+      // unless they re-enter the zone or drawer.
+      document.addEventListener("mousemove", (e) => {
+        if (!drawerOpen || !drawerEl) return;
+        const overDrawer = drawerEl.contains(e.target);
+        const overZone = zone.contains(e.target);
+        if (overDrawer || overZone) {
+          cancelClose();
+        } else if (!hoverCloseTimer) {
+          scheduleClose();
+        }
+      });
+    } else if (zone.parentElement !== document.body || zone !== document.body.lastElementChild) {
+      // Always keep the zone as the LAST body child so newly inserted
+      // popup roots can't accidentally paint over it.
+      document.body.appendChild(zone);
     }
-    return handle;
+
+    // Remove old menu button if it exists from previous extension version.
+    const oldHandle = document.body.querySelector(":scope > .wam-drawer-handle");
+    if (oldHandle) oldHandle.remove();
+
+    return zone;
   }
 
   function bindGlobalClosers() {
@@ -585,6 +855,9 @@
     handleBound = true;
 
     // Close drawer after selecting a chat row (without blocking the click).
+    // Only treat clicks on the MAIN conversation pane as outside; clicks
+    // on rail/drawer/handle/popups must not toggle the drawer (that caused
+    // the "click empty sidebar -> chats appear and disappear" flicker).
     document.addEventListener(
       "click",
       (e) => {
@@ -592,10 +865,17 @@
         if (!drawerEl) return;
         if (!drawerOpen) return;
         if (e.target.closest(".wam-drawer-handle")) return;
+        if (e.target.closest(".wam-edge-hotzone")) return;
+        if (e.target.closest(".wam-sidebar")) return;
+        if (e.target.closest('[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], .wam-popup-sibling, .wam-popup-host')) return;
         if (drawerEl.contains(e.target)) {
           const row = e.target.closest('[role="listitem"], [role="row"], [role="button"][tabindex]');
           if (row) setTimeout(() => setDrawerOpen(false), 60);
-        } else {
+          return;
+        }
+        // Only auto-close when clicking inside the actual main pane.
+        const main = lastMain;
+        if (main && main.contains(e.target)) {
           setDrawerOpen(false);
         }
       },
@@ -608,6 +888,54 @@
         setDrawerOpen(false);
       }
     });
+
+    // Body-level popup lifter: any tooltip/menu/dialog inserted anywhere
+    // in the document needs its absolute-positioned ancestor (the popup
+    // host) lifted above the drawer. WhatsApp's popup root sits inside
+    // app-wrapper-web (z-index 100) which traps tooltips behind .wam-main.
+    const POPUP_SEL = '[role="tooltip"], [role="menu"], [role="dialog"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]';
+
+    function liftPopupAncestors(node) {
+      if (!node || node.nodeType !== 1) return;
+      let el = node.parentElement;
+      let lifted = 0;
+      while (el && el !== document.body && lifted < 6) {
+        const cs = getComputedStyle(el);
+        if (cs.position === 'absolute' || cs.position === 'fixed') {
+          el.classList.add('wam-popup-host');
+          lifted++;
+        }
+        el = el.parentElement;
+      }
+    }
+
+    function scanForPopups(root) {
+      if (!root || root.nodeType !== 1) return;
+      if (root.matches && root.matches(POPUP_SEL)) liftPopupAncestors(root);
+      if (root.querySelectorAll) {
+        for (const p of root.querySelectorAll(POPUP_SEL)) liftPopupAncestors(p);
+      }
+    }
+
+    // Initial sweep + watch.
+    scanForPopups(document.body);
+    new MutationObserver((muts) => {
+      for (const m of muts) {
+        for (const n of m.addedNodes) scanForPopups(n);
+      }
+      // Keep the edge hotzone alive and on top of the body's children.
+      // Without this the zone can get visually buried after WhatsApp
+      // inserts new popup roots later in body.
+      if (window.innerWidth <= 900) {
+        const zone = document.body.querySelector(":scope > .wam-edge-hotzone");
+        if (!zone) {
+          // Will be re-created on the next applyLayout pass.
+          debouncedApply();
+        } else if (zone !== document.body.lastElementChild) {
+          document.body.appendChild(zone);
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
   }
 
   function applyLayout() {
