@@ -10,3 +10,5 @@ In a world where multitasking is the default, WhatsApp Web insists on being the 
 After getting annoyed one too many times, I finally thought: fine, I’ll try to fix it myself.
 
 Here my attempt!
+
+🔗 https://chromewebstore.google.com/detail/whatsapp-mobile-layout/lhdkmfnaimnnjalebheaejnhkfhodibh
