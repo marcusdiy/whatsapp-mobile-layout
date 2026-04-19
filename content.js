@@ -53,7 +53,7 @@
   UTILS.addStyle(`
       @media (max-width: 900px) {
         :root {
-          --wam-rail-width: 56px;
+          --wam-rail-width: 50px;
           --wam-drawer-width: min(calc(100vw - var(--wam-rail-width) - 32px), 320px);
           --wam-section-list-height: clamp(260px, 42vh, 380px);
           --wam-drawer-handle-width: 36px;
@@ -179,6 +179,8 @@
           position: relative !important;
           z-index: 1201 !important;
           overflow: visible !important;
+          padding: 5px;
+          box-shadow: 0 0 10px #0000002
         }
         .wam-app-root.wam-mode-section > .wam-sidebar {
           grid-column: 1 !important;
@@ -235,13 +237,17 @@
           transform: translateX(-100%) !important;
           transition: transform 0.2s ease, box-shadow 0.2s ease !important;
           background: var(--panel-header-background, #fff);
+          transition-delay: 1s
         }
         .wam-drawer.wam-open {
           transform: translateX(0) !important;
           box-shadow: 0 0 50px #00000055;
+          transition-delay: 0.2s
         }
         /* Drawer children: first child is a title/header bar (auto height),
-           remaining children (e.g. #side) flex to fill and scroll. */
+           remaining children (e.g. #side) flex to fill and scroll. If it's a
+           complex pane (like Canali) we only apply this auto-height to explicit
+           <header> elements to prevent list-containers from collapsing. */
         .wam-drawer > * {
           width: 100% !important;
           max-width: 100% !important;
@@ -249,11 +255,11 @@
           margin: 0 !important;
           pointer-events: auto;
         }
-        .wam-drawer > *:first-child {
+        .wam-drawer > header:first-child {
           flex: 0 0 auto !important;
           height: auto !important;
         }
-        .wam-drawer > *:not(:first-child) {
+        .wam-drawer > *:not(header:first-child) {
           flex: 1 1 auto !important;
           height: auto !important;
           min-height: 0 !important;
@@ -281,42 +287,24 @@
           min-height: 0 !important;
         }
 
-        /* Hover hot zone: a thin invisible strip along the left edge of
-           the main pane. Hovering it slides the drawer in (replaces the
-           old menu button). Stays out of the way otherwise. */
+        /* Hidden hover strip along the rail edge. Keep it out of the
+           composer area so it never blocks the + button. */
         .wam-edge-hotzone {
           position: fixed;
           left: var(--wam-rail-width);
           top: 0;
-          bottom: 0;
-          width: 18px;
-          /* Must sit above wam-popup-host (2147483645) so the zone is
-             never visually buried under WhatsApp's popup-root containers
-             that we lift for tooltip rendering. */
+          bottom: 96px;
+          width: 20px;
           z-index: 2147483647;
           background: transparent;
           cursor: pointer;
         }
         body.wam-drawer-open .wam-edge-hotzone {
           left: calc(var(--wam-rail-width) + var(--wam-drawer-width));
-          width: 24px;
+          width: 0;
         }
-        /* Subtle visual hint on the edge (a thin colored stripe). */
         .wam-edge-hotzone::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 4px;
-          height: 56px;
-          border-radius: 0 4px 4px 0;
-          background: #21c06366;
-          transition: background 0.15s ease, width 0.15s ease;
-        }
-        .wam-edge-hotzone:hover::before {
-          background: #21c063;
-          width: 6px;
+          display: none;
         }
 
         .wam-section-root {
@@ -376,6 +364,7 @@
           width: calc(100vw - var(--wam-rail-width)) !important;
           max-width: calc(100vw - var(--wam-rail-width)) !important;
         }
+        
 
         /* Keep the message composer clear of the preserved rail. */
         footer {
@@ -472,11 +461,11 @@
         '[role="tooltip"]',
         '[role="listbox"]',
         '[aria-modal="true"]',
-        '[data-animate-modal-popup]',
-        '[data-animate-modal-body]',
+        "[data-animate-modal-popup]",
+        "[data-animate-modal-body]",
         '[contenteditable="true"]',
         'input[type="file"]',
-        'textarea',
+        "textarea",
         '[data-icon="send"]',
         '[data-icon="document-refreshed"]',
         '[data-icon="media-multiple"]',
@@ -506,10 +495,7 @@
     const obs = new MutationObserver(() => {
       promoteOverlayIfPopulated(child);
       // If WA later empties it again, demote back so it doesn't block.
-      if (
-        child.classList.contains("wam-popup-sibling") &&
-        !hasRichOverlayContent(child)
-      ) {
+      if (child.classList.contains("wam-popup-sibling") && !hasRichOverlayContent(child)) {
         child.classList.remove("wam-popup-sibling", "wam-popup-fill");
         child.classList.add("wam-overlay-neutral");
       }
@@ -520,22 +506,29 @@
 
   function isPopupLike(el) {
     if (!el || el.nodeType !== 1) return false;
-    if (el.matches('[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]')) {
+    if (
+      el.matches(
+        '[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]',
+      )
+    ) {
       return true;
     }
-    if (el.querySelector('[role="dialog"], [role="menu"], [role="tooltip"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]')) {
+    if (
+      el.querySelector('[role="dialog"], [role="menu"], [role="tooltip"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]')
+    ) {
       return true;
     }
     // Media/file composer: WhatsApp inserts a fullscreen overlay with a
     // close button + a row of file inputs. Detect via the close icon plus
     // the absence of #pane-side / rail content.
-    if (el.querySelector('[data-icon="x"], [data-icon="x-alt"], [data-icon="close"]') &&
-        !el.querySelector('#pane-side, header')) {
+    if (el.querySelector('[data-icon="x"], [data-icon="x-alt"], [data-icon="close"]') && !el.querySelector("#pane-side, header")) {
       return true;
     }
     // Drag-drop overlay shown when dragging a file over the window.
-    if (el.querySelector('[data-icon="media-multiple"], [data-icon="paperclip"], [data-icon="document-refreshed"]') &&
-        !el.querySelector('#pane-side, header')) {
+    if (
+      el.querySelector('[data-icon="media-multiple"], [data-icon="paperclip"], [data-icon="document-refreshed"]') &&
+      !el.querySelector("#pane-side, header")
+    ) {
       return true;
     }
     return false;
@@ -547,6 +540,82 @@
 
     if (side) side.classList.add("wam-drawer-shell");
     if (paneSide) paneSide.classList.add("wam-drawer-scroll");
+  }
+
+  function tagSectionDrawer(sectionList, sectionDetail) {
+    if (sectionList) {
+      const primary = sectionList.firstElementChild || sectionList;
+      const listScroll = findScrollableDescendant(primary);
+      if (listScroll) {
+        listScroll.classList.add("wam-drawer-scroll");
+        markAncestorChain(listScroll, sectionList, "wam-drawer-shell");
+      } else {
+        primary.classList.add("wam-drawer-shell");
+      }
+
+      // WhatsApp often bundles the list and an empty detail placeholder
+      // together in non-Chat tabs. Hide the duplicate inner placeholder.
+      const internalDetail = Array.from(sectionList.children).find((child) => {
+        if (child === primary) return false;
+        const r = child.getBoundingClientRect();
+        return r.width > 50 && r.height > 50;
+      });
+      if (internalDetail) {
+        internalDetail.classList.add("wam-hidden-pane");
+      }
+    }
+
+    if (sectionDetail) {
+      const detailScroll = findScrollableDescendant(sectionDetail);
+      if (detailScroll) {
+        detailScroll.classList.add("wam-stack-scroll");
+        markAncestorChain(detailScroll, sectionDetail, "wam-stack-frame");
+      }
+    }
+  }
+
+  function scoreSectionDrawerCandidate(child) {
+    if (!child) return Number.NEGATIVE_INFINITY;
+
+    const rect = child.getBoundingClientRect();
+    if (rect.width < 120 || rect.height < 120) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const text = (child.innerText || "").trim();
+    const buttons = child.querySelectorAll('button, [role="button"], [role="row"], [role="gridcell"], a').length;
+    const search = child.querySelector('input, [role="textbox"], textarea');
+    const structuredList = child.querySelector('[role="grid"], [role="list"], [role="feed"], [role="tree"]');
+    const avatarCount = child.querySelectorAll("img").length;
+    const scrollRoot = findScrollableDescendant(child);
+    const lineCount = text ? text.split(/\n+/).filter(Boolean).length : 0;
+    const heroLike = /canali suggeriti|restare in contatto|condividi aggiornamenti di stato/i.test(text);
+
+    let score = 0;
+    if (search) score += 500;
+    if (structuredList) score += 220;
+    score += Math.min(buttons, 14) * 24;
+    score += Math.min(avatarCount, 12) * 10;
+    score += Math.min(lineCount, 18) * 6;
+    score += Math.max(0, 240 - rect.left) / 3;
+
+    if (scrollRoot && scrollRoot.scrollHeight > scrollRoot.clientHeight + 40) {
+      score += 120;
+    }
+
+    if (/trova canali da seguire|il mio stato|cerca/i.test(text)) {
+      score += 100;
+    }
+
+    if (heroLike) {
+      score -= 320;
+    }
+
+    if (!search && !structuredList && buttons <= 2 && lineCount <= 6) {
+      score -= 140;
+    }
+
+    return score;
   }
 
   function tagSectionPane(sectionList, sectionDetail) {
@@ -659,16 +728,23 @@
       }
     }
 
-    const hasSectionSiblingCandidate = visibleContentChildren.some((child) => child !== paneSideHost && getComputedStyle(child).position === "absolute");
+    const hasSectionSiblingCandidate = visibleContentChildren.some(
+      (child) => child !== paneSideHost && getComputedStyle(child).position === "absolute",
+    );
     const nonChatSectionActive = (!!activeRailBtn && !chatRailActive) || (!chatRailActive && hasSectionSiblingCandidate);
 
     if (nonChatSectionActive) {
       const sectionCandidates = visibleContentChildren.filter((child) => child !== paneSideHost);
-      const sectionRoot = sectionCandidates.find((child) => getComputedStyle(child).position === "absolute") || sectionCandidates[0] || null;
-      const sectionDetail = sectionCandidates.find((child) => child !== sectionRoot) || null;
+      const rankedSectionCandidates = sectionCandidates
+        .map((child) => ({ child, score: scoreSectionDrawerCandidate(child) }))
+        .sort((a, b) => b.score - a.score);
 
-      if (sectionRoot) sectionRoot.classList.add("wam-section-root");
-      tagSectionPane(sectionRoot, sectionDetail);
+      const sectionRoot = rankedSectionCandidates[0]?.child || null;
+      const sectionDetail = rankedSectionCandidates.find((entry) => entry.child !== sectionRoot)?.child || null;
+
+      if (sectionRoot) sectionRoot.classList.add("wam-drawer");
+      if (sectionDetail) sectionDetail.classList.add("wam-main");
+      tagSectionDrawer(sectionRoot, sectionDetail);
       if (paneSideHost) paneSideHost.classList.add("wam-hidden-pane");
       for (const child of visibleContentChildren) {
         if (child !== sectionRoot && child !== sectionDetail && child !== paneSideHost) {
@@ -677,9 +753,9 @@
       }
 
       return {
-        mode: "section",
-        drawer: null,
-        main: null,
+        mode: "section-drawer",
+        drawer: sectionRoot,
+        main: sectionDetail,
         list: sectionRoot,
       };
     }
@@ -753,7 +829,12 @@
     railBound = true;
     rail.addEventListener(
       "click",
-      () => {
+      (event) => {
+        const target = event.target;
+        const railButton = target instanceof Element ? target.closest("button, [role='button']") : null;
+        if (railButton) {
+          setDrawerOpen(false);
+        }
         setTimeout(debouncedApply, 120);
       },
       true,
@@ -761,15 +842,9 @@
   }
 
   function setRailWidth(rail) {
-    const measured = Math.round(rail.getBoundingClientRect().width) || 56;
-    // Clamp to a safe range so a misclassified header can't blow up the
-    // layout to e.g. 200px wide.
-    const width = Math.max(48, Math.min(measured, 64));
+    const width = 50;
     document.documentElement.style.setProperty("--wam-rail-width", `${width}px`);
-    document.documentElement.style.setProperty(
-      "--wam-drawer-width",
-      `min(calc(100vw - ${width}px - 32px), 320px)`,
-    );
+    document.documentElement.style.setProperty("--wam-drawer-width", `min(calc(100vw - ${width}px - 10px), 320px)`);
   }
 
   function setDrawerOpen(isOpen) {
@@ -785,10 +860,32 @@
 
   let hoverCloseTimer = null;
 
+  function cancelHoverClose() {
+    if (hoverCloseTimer) {
+      clearTimeout(hoverCloseTimer);
+      hoverCloseTimer = null;
+    }
+  }
+
+  function scheduleHoverClose() {
+    cancelHoverClose();
+    hoverCloseTimer = setTimeout(() => {
+      if (!drawerEl) return;
+      const hovered = document.querySelector(":hover");
+      const overDrawer = hovered instanceof Element && drawerEl.contains(hovered);
+      if (!overDrawer) setDrawerOpen(false);
+      hoverCloseTimer = null;
+    }, 350);
+  }
+
+  function isInFooterBand(clientY) {
+    const footer = document.querySelector("footer");
+    if (!footer) return false;
+    const rect = footer.getBoundingClientRect();
+    return clientY >= rect.top - 12;
+  }
+
   function ensureHandle(drawer) {
-    // Hot zone lives on <body> (not inside drawer) because the drawer uses
-    // transform: translateX which would create a containing block for
-    // position:fixed descendants, trapping the zone off-screen.
     let zone = document.body.querySelector(":scope > .wam-edge-hotzone");
     if (!zone) {
       zone = document.createElement("div");
@@ -796,58 +893,41 @@
       zone.setAttribute("aria-label", "Reveal chat list");
       document.body.appendChild(zone);
 
-      const cancelClose = () => {
-        if (hoverCloseTimer) {
-          clearTimeout(hoverCloseTimer);
-          hoverCloseTimer = null;
-        }
-      };
-      const scheduleClose = () => {
-        cancelClose();
-        hoverCloseTimer = setTimeout(() => {
-          if (!drawerEl) return;
-          // Don't close if cursor came back over drawer or zone.
-          const hovered = drawerEl.matches(":hover") || zone.matches(":hover");
-          if (!hovered) setDrawerOpen(false);
-          hoverCloseTimer = null;
-        }, 350);
-      };
-
       zone.addEventListener("mouseenter", () => {
-        cancelClose();
+        cancelHoverClose();
         if (drawerEl) setDrawerOpen(true);
       });
-      zone.addEventListener("mouseleave", scheduleClose);
-      // Tap to toggle on touch devices.
+      zone.addEventListener("mouseleave", scheduleHoverClose);
       zone.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (drawerEl) setDrawerOpen(!drawerOpen);
       });
 
-      // When the cursor leaves the drawer, close after a short delay
-      // unless they re-enter the zone or drawer.
       document.addEventListener("mousemove", (e) => {
         if (!drawerOpen || !drawerEl) return;
         const overDrawer = drawerEl.contains(e.target);
         const overZone = zone.contains(e.target);
         if (overDrawer || overZone) {
-          cancelClose();
+          cancelHoverClose();
         } else if (!hoverCloseTimer) {
-          scheduleClose();
+          scheduleHoverClose();
         }
       });
     } else if (zone.parentElement !== document.body || zone !== document.body.lastElementChild) {
-      // Always keep the zone as the LAST body child so newly inserted
-      // popup roots can't accidentally paint over it.
       document.body.appendChild(zone);
     }
 
-    // Remove old menu button if it exists from previous extension version.
+    zone.style.bottom = document.querySelector("footer") ? "96px" : "0px";
+
     const oldHandle = document.body.querySelector(":scope > .wam-drawer-handle");
     if (oldHandle) oldHandle.remove();
-
     return zone;
+  }
+
+  function removeHandle() {
+    document.body.querySelector(":scope > .wam-edge-hotzone")?.remove();
+    document.body.querySelector(":scope > .wam-drawer-handle")?.remove();
   }
 
   function bindGlobalClosers() {
@@ -867,7 +947,12 @@
         if (e.target.closest(".wam-drawer-handle")) return;
         if (e.target.closest(".wam-edge-hotzone")) return;
         if (e.target.closest(".wam-sidebar")) return;
-        if (e.target.closest('[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], .wam-popup-sibling, .wam-popup-host')) return;
+        if (
+          e.target.closest(
+            '[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [aria-modal="true"], .wam-popup-sibling, .wam-popup-host',
+          )
+        )
+          return;
         if (drawerEl.contains(e.target)) {
           const row = e.target.closest('[role="listitem"], [role="row"], [role="button"][tabindex]');
           if (row) setTimeout(() => setDrawerOpen(false), 60);
@@ -893,7 +978,8 @@
     // in the document needs its absolute-positioned ancestor (the popup
     // host) lifted above the drawer. WhatsApp's popup root sits inside
     // app-wrapper-web (z-index 100) which traps tooltips behind .wam-main.
-    const POPUP_SEL = '[role="tooltip"], [role="menu"], [role="dialog"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]';
+    const POPUP_SEL =
+      '[role="tooltip"], [role="menu"], [role="dialog"], [role="listbox"], [aria-modal="true"], [data-animate-modal-popup], [data-animate-modal-body]';
 
     function liftPopupAncestors(node) {
       if (!node || node.nodeType !== 1) return;
@@ -901,8 +987,8 @@
       let lifted = 0;
       while (el && el !== document.body && lifted < 6) {
         const cs = getComputedStyle(el);
-        if (cs.position === 'absolute' || cs.position === 'fixed') {
-          el.classList.add('wam-popup-host');
+        if (cs.position === "absolute" || cs.position === "fixed") {
+          el.classList.add("wam-popup-host");
           lifted++;
         }
         el = el.parentElement;
@@ -923,16 +1009,13 @@
       for (const m of muts) {
         for (const n of m.addedNodes) scanForPopups(n);
       }
-      // Keep the edge hotzone alive and on top of the body's children.
-      // Without this the zone can get visually buried after WhatsApp
-      // inserts new popup roots later in body.
       if (window.innerWidth <= 900) {
         const zone = document.body.querySelector(":scope > .wam-edge-hotzone");
-        if (!zone) {
-          // Will be re-created on the next applyLayout pass.
-          debouncedApply();
-        } else if (zone !== document.body.lastElementChild) {
-          document.body.appendChild(zone);
+        if (zone) {
+          zone.style.bottom = document.querySelector("footer") ? "96px" : "0px";
+          if (zone !== document.body.lastElementChild) {
+            document.body.appendChild(zone);
+          }
         }
       }
     }).observe(document.body, { childList: true, subtree: true });
@@ -950,6 +1033,7 @@
     setRailWidth(rail);
 
     const layout = classifyChildren(nav, rail);
+    const drawerChanged = !!layout.drawer && layout.drawer !== drawerEl;
 
     if (layout.mode === "chat") {
       if (layout.main) {
@@ -960,17 +1044,21 @@
       }
     }
 
-    nav.classList.toggle("wam-mode-chat", layout.mode === "chat");
+    nav.classList.toggle("wam-mode-chat", layout.mode === "chat" || layout.mode === "section-drawer");
     nav.classList.toggle("wam-mode-section", layout.mode === "section");
     setLayoutMode(layout.mode);
 
-    if (layout.mode === "chat" && layout.drawer) {
+    if (layout.drawer) {
+      if (drawerChanged) {
+        drawerOpen = false;
+      }
       drawerEl = layout.drawer;
       ensureHandle(layout.drawer);
       setDrawerOpen(drawerOpen);
     } else {
       drawerEl = null;
       setDrawerOpen(false);
+      removeHandle();
     }
 
     ensureNavObserver(nav);
