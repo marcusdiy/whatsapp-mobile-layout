@@ -3,6 +3,6 @@
     "message": "WhatsApp Mobile Layout"
   },
   "extDescription": {
-    "message": "WhatsApp Web feels like it's frozen in time. It demands half your screen like it's 2015. Try using it alongside code, docs, design tools, or even a browser tab split — it just breaks down. The layout collapses, text gets awkward, and it's clearly not designed to be resized down to a phone-like width.\n\nIn a world where multitasking is the default, WhatsApp Web insists on being the main character.\nAfter getting annoyed one too many times, I finally thought: fine, I'll try to fix it myself."
+    "message": "Makes WhatsApp Web fit narrow windows with a mobile-style layout."
   }
 }

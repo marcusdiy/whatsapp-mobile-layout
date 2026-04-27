@@ -3,6 +3,6 @@
     "message": "WhatsApp Layout Móvel"
   },
   "extDescription": {
-    "message": "O WhatsApp Web parece congelado no tempo. Ele exige metade do seu ecrã como se fosse 2015. Tente usá-lo ao lado de código, documentos, ferramentas de design ou até uma aba dividida do navegador — ele simplesmente quebra. O layout colapsa, o texto fica estranho, e está claro que não foi projetado para ser redimensionado para uma largura semelhante à de um telefone.\n\nNum mundo onde o multitarefa é o padrão, o WhatsApp Web insiste em ser o personagem principal.\nDepois de me irritar uma vez a mais, finalmente pensei: tá bom, vou tentar consertar eu mesmo."
+    "message": "Adapta o WhatsApp Web a janelas estreitas com layout móvel."
   }
 }
